@@ -1,0 +1,69 @@
+<?xml version='1.0' encoding='utf-8'?>
+<plugin id="vmplayer-hot-code" version="1.0.0"
+    xmlns="http://apache.org/cordova/ns/plugins/1.0"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <name>vmplayer-hot-code</name>
+    <js-module name="vmplayerHotCode" src="www/vmplayer-hot-code.js">
+        <clobbers target="cordova.plugins.vmplayerHotCode" />
+    </js-module>
+    <platform name="android">
+        <js-module name="emulateCordovaHttpd" src="www/android/emulate-cordova-httpd.js">
+            <clobbers target="cordova.plugins.CorHttpd" />
+        </js-module>
+        <framework src="androidx.webkit:webkit:1.x.x" />
+        <config-file parent="/*" target="res/xml/config.xml">
+            <feature name="vmplayerHotCode">
+                <param name="android-package" value="VMPlayerHotCode.VMPlayerHotCodePlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+        <config-file parent="/*" target="AndroidManifest.xml">
+        </config-file>
+        <source-file src="src/android/VMPlayerHotCodePlugin.java" target-dir="src/VMPlayerHotCode" />
+    </platform>
+    <platform name="ios">
+        <js-module name="emulateCordovaHttpd" src="www/ios/emulate-cordova-httpd.js">
+            <clobbers target="cordova.plugins.CorHttpd" />
+        </js-module>
+        <config-file parent="/*" target="config.xml">
+            <feature name="vmplayerHotCode">
+                <param name="ios-package" value="VMPlayerHotCodePlugin" />
+                <param name="onload" value="true" />
+            </feature>
+        </config-file>
+
+        <source-file src="src/ios/VMPlayerHotCodePlugin.m"/>
+
+        <source-file src="src/ios/GCDWebServer/GCDWebDAVServer/GCDWebDAVServer.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerResponse.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerRequest.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerFunctions.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServer.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerConnection.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerErrorResponse.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerFileResponse.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerDataResponse.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerStreamedResponse.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerURLEncodedFormRequest.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerMultiPartFormRequest.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerDataRequest.m"/>
+        <source-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerFileRequest.m"/>
+
+        <header-file src="src/ios/GCDWebServer/GCDWebDAVServer/GCDWebDAVServer.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerFunctions.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerPrivate.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerConnection.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServer.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerHTTPStatusCodes.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerResponse.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Core/GCDWebServerRequest.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerFileResponse.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerStreamedResponse.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerDataResponse.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Responses/GCDWebServerErrorResponse.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerDataRequest.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerMultiPartFormRequest.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerFileRequest.h"/>
+        <header-file src="src/ios/GCDWebServer/GCDWebServer/Requests/GCDWebServerURLEncodedFormRequest.h"/>
+    </platform>
+</plugin>
