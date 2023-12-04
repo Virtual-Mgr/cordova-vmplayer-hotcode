@@ -1,5 +1,5 @@
 {
-  "name": "vmplayer-hot-code",
+  "name": "cordova-vmplayer-hotcode",
   "version": "1.0.0",
   "description": "VMPlayer Hot Code Plugin",
   "main": "index.js",
