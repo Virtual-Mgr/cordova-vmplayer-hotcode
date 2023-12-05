@@ -310,8 +310,11 @@ public class VMPlayerHotCodePlugin extends CordovaPlugin {
 							path = "index.html";
 						}
 
+						if (!path.startsWith("/")) {
+							path = "/" + path;
+						}
 						try {
-							inputStream = assetManager.open("www/" + path,
+							inputStream = assetManager.open("www" + path,
 									AssetManager.ACCESS_STREAMING);
 						} catch (IOException e) {
 							return new WebResourceResponse("text/plain", "UTF-8", 404, "Not found", null, null);
