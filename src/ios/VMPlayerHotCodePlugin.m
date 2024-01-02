@@ -185,6 +185,11 @@ NSDictionary *_spaConfig;
     CDVViewController *vc = (CDVViewController *)self.viewController;
 
     NSUInteger port = 0;
+    NSNumber *httpPortSetting = [self.commandDelegate.settings objectForKey:@"httpPort"];
+
+    if (httpPortSetting != nil) {
+        port = [httpPortSetting unsignedIntegerValue];
+    }
     NSString* indexPage = vc.startPage;
 
     _dataFolderPath = dataFolderPath();
