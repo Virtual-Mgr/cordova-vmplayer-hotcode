@@ -185,10 +185,10 @@ NSDictionary *_spaConfig;
     CDVViewController *vc = (CDVViewController *)self.viewController;
 
     NSUInteger port = 0;
-    NSNumber *httpPortSetting = [self.commandDelegate.settings objectForKey:@"IOS_HTTP_PORT"];
+    NSString *httpPortSetting = [self.commandDelegate.settings objectForKey:@"ios_http_port"];
 
     if (httpPortSetting != nil) {
-        port = [httpPortSetting unsignedIntegerValue];
+        port = (NSUInteger)[httpPortSetting integerValue];
     }
     NSString* indexPage = vc.startPage;
 
