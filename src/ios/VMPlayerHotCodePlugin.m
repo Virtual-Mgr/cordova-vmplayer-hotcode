@@ -185,7 +185,7 @@ NSDictionary *_spaConfig;
     CDVViewController *vc = (CDVViewController *)self.viewController;
 
     NSUInteger port = 0;
-    NSNumber *httpPortSetting = [self.commandDelegate.settings objectForKey:@"httpPort"];
+    NSNumber *httpPortSetting = [self.commandDelegate.settings objectForKey:@"IOS_HTTP_PORT"];
 
     if (httpPortSetting != nil) {
         port = [httpPortSetting unsignedIntegerValue];
