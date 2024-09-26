@@ -537,10 +537,10 @@ NSDictionary *_spaConfig;
                 response = [GCDWebServerResponse responseWithStatusCode:kGCDWebServerHTTPStatusCode_NotFound];
             }
 
-            if (hasToken && !hasCookie) {
-                //set cookie
-                [response setValue:[NSString stringWithFormat:@"%@;path=/", authToken] forAdditionalHeader:@"Set-Cookie"];
-            }
+            // LUCIFER-968 We set the cookie on every response with a long expiry so this gaurantees the cookie is always set and will persist across Webview sessions
+            NSString *cookieValue = [NSString stringWithFormat:@"%@; Max-Age=%ld; Path=/; HttpOnly", authToken, 100*365*24*60*60L]; // 100 years in seconds
+            [response setValue:cookieValue forAdditionalHeader:@"Set-Cookie"];
+
             complete(response);
         });
     };

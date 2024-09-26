@@ -43,4 +43,18 @@ var plugin = {
     }
 }
 
+// LUCIFER-968 We request this dummy localhost URL to make sure our HotcodePlugin Auth cookie is refreshed to make sure it never expires
+const localHostUrl = window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '') + '/plugins/cordova-vmplayer-hotcode/www/auth_refresh_dummy.txt';
+console.log('cordova-vmplayer-hotcode: Auth cookie refresh URL:', localHostUrl);
+
+window.setInterval(() => {
+    fetch(localHostUrl)
+        .then(() => {
+            console.log('cordova-vmplayer-hotcode: Auth cookie refreshed');
+        })
+        .catch(() => {
+            console.log('cordova-vmplayer-hotcode: Auth cookie refresh failed');
+        });
+}, 1000 * 60 * 5); // 5 minutes
+
 module.exports = plugin;
