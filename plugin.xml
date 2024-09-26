@@ -6,7 +6,11 @@
     <js-module name="vmplayerHotCode" src="www/vmplayer-hot-code.js">
         <clobbers target="cordova.plugins.vmplayerHotCode" />
     </js-module>
+
     <platform name="android">
+        <!-- Copy the auth_refresh_dummy.txt file to the www directory -->
+        <asset src="www/auth_refresh_dummy.txt" target="www/auth_refresh_dummy.txt" />
+
         <js-module name="emulateCordovaHttpd" src="www/android/emulate-cordova-httpd.js">
             <clobbers target="cordova.plugins.CorHttpd" />
         </js-module>
@@ -22,6 +26,9 @@
         <source-file src="src/android/VMPlayerHotCodePlugin.java" target-dir="src/VMPlayerHotCode" />
     </platform>
     <platform name="ios">
+        <!-- Copy the auth_refresh_dummy.txt file to the www directory -->
+        <asset src="www/auth_refresh_dummy.txt" target="plugins/cordova-vmplayer-hotcode/www/auth_refresh_dummy.txt" />
+
         <js-module name="emulateCordovaHttpd" src="www/ios/emulate-cordova-httpd.js">
             <clobbers target="cordova.plugins.CorHttpd" />
         </js-module>
