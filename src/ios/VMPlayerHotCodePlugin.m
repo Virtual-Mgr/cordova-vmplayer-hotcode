@@ -217,7 +217,8 @@ NSDictionary *_spaConfig;
     }
     else
     {
-        _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)self.server.port];
+        // Use the port decided above, if we are started via a push then the HTTP server may not be started and return port 0
+        _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)port];
         vc.startPage = [NSString stringWithFormat:@"%@%@?%@", _httpURL, indexPage, authToken];
     }
 }
