@@ -1,12 +1,9 @@
 package VMPlayerHotCode;
 
-import android.content.Context;
 import android.content.res.AssetManager;
-import android.net.Uri;
 import android.webkit.WebResourceResponse;
 import android.webkit.MimeTypeMap;
 
-import org.apache.cordova.BuildConfig;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.CallbackContext;
