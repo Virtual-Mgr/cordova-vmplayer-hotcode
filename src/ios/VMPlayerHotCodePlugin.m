@@ -206,21 +206,57 @@ NSDictionary *_spaConfig;
     // add after server is started to get the true port
     [self addHotCodeFileSystemHandler:authToken];
 
-    // handlers must be added before server starts
-    NSMutableDictionary* options = [[NSMutableDictionary alloc] init];
-    [options setValue:[NSNumber numberWithUnsignedShort:port] forKey:GCDWebServerOption_Port];
-    [options setValue:[NSNumber numberWithBool:YES] forKey:GCDWebServerOption_BindToLocalhost];
-    NSError* error = nil;
-    if (![self.server startWithOptions:options error:&error])
-    {
-        NSLog(@"Could not start GCDWebServer !!");
+    // handlers must be added before the server starts (done above)
+
+    // Try the configured (fixed) port first, with a couple of quick retries in case a
+    // transient squatter (e.g. an ephemeral source port held by another app) frees up.
+    NSUInteger boundPort = [self startServerOnPort:port retries:2];
+
+    // LUCIFER-1761: if the configured port cannot be bound (taken by another app at cold
+    // start) fall back to a kernel-assigned ephemeral port so we still come up instead of
+    // white-screening. The server CORS allow-list permits any localhost port, and the bundle
+    // always derives its base URL from getHttpURL, so a non-fixed port is safe.
+    if (boundPort == 0 && port != 0) {
+        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: configured port %lu unavailable at startup, falling back to an ephemeral port", (unsigned long)port);
+        boundPort = [self startServerOnPort:0 retries:0];
     }
-    else
-    {
-        // Use the port decided above, if we are started via a push then the HTTP server may not be started and return port 0
-        _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)port];
+
+    if (boundPort != 0) {
+        _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)boundPort];
         vc.startPage = [NSString stringWithFormat:@"%@%@?%@", _httpURL, indexPage, authToken];
+        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: serving on %@ (configured=%lu actual=%lu%@)",
+              _httpURL, (unsigned long)port, (unsigned long)boundPort,
+              (port != 0 && boundPort != port) ? @" EPHEMERAL-FALLBACK" : @"");
+    } else {
+        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: FAILED to start HTTP server on any port - the webview will not load");
     }
+}
+
+// LUCIFER-1761: Start GCDWebServer on the given port (0 = kernel-assigned), keeping the
+// listening socket bound across background (AutomaticallySuspendInBackground=NO) so the port
+// cannot be taken from us or fail to rebind while we are alive. Retries a few times before
+// giving up. Returns the actual bound port, or 0 if the server could not be started.
+- (NSUInteger)startServerOnPort:(NSUInteger)port retries:(NSInteger)retries
+{
+    for (NSInteger attempt = 0; attempt <= retries; attempt++) {
+        NSMutableDictionary* options = [[NSMutableDictionary alloc] init];
+        [options setValue:[NSNumber numberWithUnsignedShort:port] forKey:GCDWebServerOption_Port];
+        [options setValue:[NSNumber numberWithBool:YES] forKey:GCDWebServerOption_BindToLocalhost];
+        [options setValue:[NSNumber numberWithBool:NO] forKey:GCDWebServerOption_AutomaticallySuspendInBackground];
+
+        NSError* error = nil;
+        if ([self.server startWithOptions:options error:&error]) {
+            NSUInteger actual = self.server.port;
+            NSLog(@"VMPlayerHotCode[LUCIFER-1761]: bound HTTP server on port %lu (requested %lu, attempt %ld)", (unsigned long)actual, (unsigned long)port, (long)(attempt + 1));
+            return actual;
+        }
+
+        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: could not bind port %lu (attempt %ld of %ld): %@", (unsigned long)port, (long)(attempt + 1), (long)(retries + 1), error);
+        if (attempt < retries) {
+            [NSThread sleepForTimeInterval:0.25];
+        }
+    }
+    return 0;
 }
 
 /*
