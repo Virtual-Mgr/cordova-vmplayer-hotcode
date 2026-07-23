@@ -352,7 +352,12 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
     } else if ([engineView respondsToSelector:@selector(loadRequest:)]) {
         [(WKWebView*)engineView loadRequest:request];
     }
-    VMHOTLOG("reloaded webview at %{public}@", newURLString);
+
+    // Log the destination WITHOUT the query string: it carries the cdvToken (LUCIFER-968 auth
+    // secret), which must never reach the public unified log. Port + path + fragment are enough.
+    NSURLComponents* logComps = [NSURLComponents componentsWithString:newURLString];
+    logComps.query = nil;
+    VMHOTLOG("reloaded webview at %{public}@", logComps.URL.absoluteString ?: _httpURL);
 }
 
 // LUCIFER-1761: Start GCDWebServer on the given port (0 = kernel-assigned), keeping the
