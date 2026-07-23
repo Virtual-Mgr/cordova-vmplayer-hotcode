@@ -281,12 +281,18 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
         return; // server never came up at launch; nothing to re-establish
     }
 
-    // Release whatever we (may still) hold, then try to reclaim the same port. If the socket
-    // survived a brief background this reclaims it seamlessly; if iOS tore it down this rebinds
-    // it; if another app now owns it, the bind fails and we fall through to an ephemeral port.
+    // Runs on the main thread during the foreground transition, so keep it fast and non-blocking:
+    // a single reclaim attempt (no retry sleeps), then immediately fall to a kernel-assigned free
+    // port. SO_REUSEADDR makes an immediate rebind of a genuinely-free previous port reliable, so
+    // retrying with sleeps would only delay the port switch and needlessly block the main thread.
+    VMHOTLOG("resume: re-establishing server (previous port %lu)", (unsigned long)previousPort);
+
+    // Release whatever we (may still) hold. If the socket survived a brief background the single
+    // reclaim below rebinds it seamlessly; if iOS tore it down we rebind it; if another app now
+    // owns it, the reclaim fails and we fall through to an ephemeral port.
     [self.server stop];
 
-    NSUInteger newPort = [self startServerOnPort:previousPort retries:2];
+    NSUInteger newPort = [self startServerOnPort:previousPort retries:0];
     if (newPort == 0) {
         newPort = [self startServerOnPort:0 retries:0];
     }
