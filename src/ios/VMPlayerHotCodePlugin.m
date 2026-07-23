@@ -8,6 +8,7 @@
 #import <MobileCoreServices/MobileCoreServices.h>
 #import <objc/message.h>
 #import <netinet/in.h>
+#import <WebKit/WebKit.h>
 
 static NSString* const HOT_CODE_CONFIG_JSON = @"hot-code-config.json";
 static NSString* const RELATIVE_ROOT = @"relativeRoot";
@@ -179,6 +180,12 @@ NSString* _dataFolderPath;
 NSString* _httpURL;
 HotCodeFile *_hotCodeFile;
 NSDictionary *_spaConfig;
+// LUCIFER-1761 (resume): remembered so we can re-establish the local server when the app
+// returns to the foreground. iOS tears down the listening socket while the app is suspended
+// (e.g. device locked), so the port we came up on may be dead or stolen by the time we resume.
+NSUInteger _boundPort;      // the port we are currently serving on (0 = not started)
+NSString* _authToken;       // "cdvToken=..." appended on (re)loads and matched by the handler
+NSString* _startIndexPage;  // start page (index.html) for fallback reloads
 
 -(void)pluginInitialize
 {
@@ -199,6 +206,8 @@ NSDictionary *_spaConfig;
     // The authToken is appended to index.html as a query parameter and when this page loads will be pushed into a Cookie
     // this prevents other iOS Apps from hitting our Http server without the random token
     NSString* authToken = [NSString stringWithFormat:@"cdvToken=%@", [[NSProcessInfo processInfo] globallyUniqueString]];
+    _authToken = authToken;
+    _startIndexPage = indexPage;
 
     self.server = [[GCDWebServer alloc] init];
     [GCDWebServer setLogLevel:kGCDWebServerLoggingLevel_Error];
@@ -222,14 +231,107 @@ NSDictionary *_spaConfig;
     }
 
     if (boundPort != 0) {
+        _boundPort = boundPort;
         _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)boundPort];
         vc.startPage = [NSString stringWithFormat:@"%@%@?%@", _httpURL, indexPage, authToken];
         NSLog(@"VMPlayerHotCode[LUCIFER-1761]: serving on %@ (configured=%lu actual=%lu%@)",
               _httpURL, (unsigned long)port, (unsigned long)boundPort,
               (port != 0 && boundPort != port) ? @" EPHEMERAL-FALLBACK" : @"");
+
+        // LUCIFER-1761 (resume): re-establish the server whenever we return to the foreground.
+        // WillEnterForeground does NOT fire on cold launch, so this never double-starts here.
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(onWillEnterForeground:)
+                                                     name:UIApplicationWillEnterForegroundNotification
+                                                   object:nil];
     } else {
         NSLog(@"VMPlayerHotCode[LUCIFER-1761]: FAILED to start HTTP server on any port - the webview will not load");
     }
+}
+
+-(void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+// LUCIFER-1761 (resume): iOS releases our listening socket while the app is suspended (most
+// reproducibly when the device is locked), and another app can claim the port before we resume.
+// On every foreground we therefore rebuild the server: reclaim the previous port if it is free,
+// otherwise take a kernel-assigned free port and do a full webview reload so every localhost:PORT
+// reference (getHttpURL, bundle "Applying update", side-menu refresh) points at the live port.
+-(void)onWillEnterForeground:(NSNotification*)notification
+{
+    NSUInteger previousPort = _boundPort;
+    if (previousPort == 0) {
+        return; // server never came up at launch; nothing to re-establish
+    }
+
+    // Release whatever we (may still) hold, then try to reclaim the same port. If the socket
+    // survived a brief background this reclaims it seamlessly; if iOS tore it down this rebinds
+    // it; if another app now owns it, the bind fails and we fall through to an ephemeral port.
+    [self.server stop];
+
+    NSUInteger newPort = [self startServerOnPort:previousPort retries:2];
+    if (newPort == 0) {
+        newPort = [self startServerOnPort:0 retries:0];
+    }
+
+    if (newPort == 0) {
+        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: resume FAILED to re-establish HTTP server on any port");
+        return;
+    }
+
+    _boundPort = newPort;
+
+    if (newPort == previousPort) {
+        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: resume reclaimed previous port %lu (no reload needed)", (unsigned long)newPort);
+        return;
+    }
+
+    // Port changed — the previous port was taken by another app. Repoint and full-reload.
+    _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)newPort];
+    NSLog(@"VMPlayerHotCode[LUCIFER-1761]: resume could not reclaim port %lu, moved to %lu - reloading webview at %@",
+          (unsigned long)previousPort, (unsigned long)newPort, _httpURL);
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self reloadWebViewOnCurrentPort];
+    });
+}
+
+// Reload the webview at the current (_boundPort) origin, preserving the current path/query/hash
+// so the user stays on the same screen. Cookies are not port-scoped (RFC 6265), so the existing
+// cdvToken cookie stays valid across the port change; we also re-append the token query to be safe.
+-(void)reloadWebViewOnCurrentPort
+{
+    NSURL* currentURL = nil;
+    id engineView = self.webView;
+    if ([engineView isKindOfClass:[WKWebView class]]) {
+        currentURL = [(WKWebView*)engineView URL];
+    }
+
+    NSString* newURLString = nil;
+    if (currentURL != nil && currentURL.path.length > 0 && [currentURL.host isEqualToString:@"localhost"]) {
+        NSURLComponents* comps = [NSURLComponents componentsWithURL:currentURL resolvingAgainstBaseURL:NO];
+        comps.scheme = @"http";
+        comps.host = @"localhost";
+        comps.port = @(_boundPort);
+        NSString* query = comps.query ?: @"";
+        if (![query containsString:@"cdvToken="]) {
+            comps.query = query.length > 0 ? [NSString stringWithFormat:@"%@&%@", query, _authToken] : _authToken;
+        }
+        newURLString = comps.URL.absoluteString;
+    } else {
+        // Fallback: reload the start page from the new origin.
+        newURLString = [NSString stringWithFormat:@"%@%@?%@", _httpURL, _startIndexPage, _authToken];
+    }
+
+    NSURLRequest* request = [NSURLRequest requestWithURL:[NSURL URLWithString:newURLString]];
+    if ([self.webViewEngine respondsToSelector:@selector(loadRequest:)]) {
+        [self.webViewEngine loadRequest:request];
+    } else if ([engineView respondsToSelector:@selector(loadRequest:)]) {
+        [(WKWebView*)engineView loadRequest:request];
+    }
+    NSLog(@"VMPlayerHotCode[LUCIFER-1761]: reloaded webview at %@", newURLString);
 }
 
 // LUCIFER-1761: Start GCDWebServer on the given port (0 = kernel-assigned), keeping the
