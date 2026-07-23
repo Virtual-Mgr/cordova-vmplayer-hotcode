@@ -9,6 +9,21 @@
 #import <objc/message.h>
 #import <netinet/in.h>
 #import <WebKit/WebKit.h>
+#import <os/log.h>
+
+// LUCIFER-1761: log port/URL diagnostics to a dedicated os_log subsystem so the values are
+// READABLE and filterable in Console.app for untethered, after-the-fact inspection. NSLog's
+// dynamic %@ arguments are redacted as <private> in the device's unified log (only the static
+// text survives), which is why filtering on "localhost" found nothing off-device. These values
+// (ports, the localhost URL) are non-sensitive, so they are logged with %{public}.
+// Filter in Console.app on subsystem "com.virtualmgr.vmplayer" or category "PortLifecycle".
+static os_log_t VMHotCodeLog(void) {
+    static os_log_t log;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ log = os_log_create("com.virtualmgr.vmplayer", "PortLifecycle"); });
+    return log;
+}
+#define VMHOTLOG(fmt, ...) os_log(VMHotCodeLog(), "[LUCIFER-1761] " fmt, ##__VA_ARGS__)
 
 static NSString* const HOT_CODE_CONFIG_JSON = @"hot-code-config.json";
 static NSString* const RELATIVE_ROOT = @"relativeRoot";
@@ -226,7 +241,7 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
     // white-screening. The server CORS allow-list permits any localhost port, and the bundle
     // always derives its base URL from getHttpURL, so a non-fixed port is safe.
     if (boundPort == 0 && port != 0) {
-        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: configured port %lu unavailable at startup, falling back to an ephemeral port", (unsigned long)port);
+        VMHOTLOG("configured port %lu unavailable at startup, falling back to an ephemeral port", (unsigned long)port);
         boundPort = [self startServerOnPort:0 retries:0];
     }
 
@@ -234,9 +249,9 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
         _boundPort = boundPort;
         _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)boundPort];
         vc.startPage = [NSString stringWithFormat:@"%@%@?%@", _httpURL, indexPage, authToken];
-        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: serving on %@ (configured=%lu actual=%lu%@)",
-              _httpURL, (unsigned long)port, (unsigned long)boundPort,
-              (port != 0 && boundPort != port) ? @" EPHEMERAL-FALLBACK" : @"");
+        VMHOTLOG("serving on %{public}@ (configured=%lu actual=%lu%{public}s)",
+                 _httpURL, (unsigned long)port, (unsigned long)boundPort,
+                 (port != 0 && boundPort != port) ? " EPHEMERAL-FALLBACK" : "");
 
         // LUCIFER-1761 (resume): re-establish the server whenever we return to the foreground.
         // WillEnterForeground does NOT fire on cold launch, so this never double-starts here.
@@ -245,7 +260,7 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
                                                      name:UIApplicationWillEnterForegroundNotification
                                                    object:nil];
     } else {
-        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: FAILED to start HTTP server on any port - the webview will not load");
+        VMHOTLOG("FAILED to start HTTP server on any port - the webview will not load");
     }
 }
 
@@ -277,21 +292,21 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
     }
 
     if (newPort == 0) {
-        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: resume FAILED to re-establish HTTP server on any port");
+        VMHOTLOG("resume FAILED to re-establish HTTP server on any port");
         return;
     }
 
     _boundPort = newPort;
 
     if (newPort == previousPort) {
-        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: resume reclaimed previous port %lu (no reload needed)", (unsigned long)newPort);
+        VMHOTLOG("resume reclaimed previous port %lu (no reload needed)", (unsigned long)newPort);
         return;
     }
 
     // Port changed — the previous port was taken by another app. Repoint and full-reload.
     _httpURL = [NSString stringWithFormat:@"http://localhost:%lu/", (unsigned long)newPort];
-    NSLog(@"VMPlayerHotCode[LUCIFER-1761]: resume could not reclaim port %lu, moved to %lu - reloading webview at %@",
-          (unsigned long)previousPort, (unsigned long)newPort, _httpURL);
+    VMHOTLOG("resume could not reclaim port %lu, moved to %lu - reloading webview at %{public}@",
+             (unsigned long)previousPort, (unsigned long)newPort, _httpURL);
 
     dispatch_async(dispatch_get_main_queue(), ^{
         [self reloadWebViewOnCurrentPort];
@@ -331,7 +346,7 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
     } else if ([engineView respondsToSelector:@selector(loadRequest:)]) {
         [(WKWebView*)engineView loadRequest:request];
     }
-    NSLog(@"VMPlayerHotCode[LUCIFER-1761]: reloaded webview at %@", newURLString);
+    VMHOTLOG("reloaded webview at %{public}@", newURLString);
 }
 
 // LUCIFER-1761: Start GCDWebServer on the given port (0 = kernel-assigned), keeping the
@@ -349,11 +364,11 @@ NSString* _startIndexPage;  // start page (index.html) for fallback reloads
         NSError* error = nil;
         if ([self.server startWithOptions:options error:&error]) {
             NSUInteger actual = self.server.port;
-            NSLog(@"VMPlayerHotCode[LUCIFER-1761]: bound HTTP server on port %lu (requested %lu, attempt %ld)", (unsigned long)actual, (unsigned long)port, (long)(attempt + 1));
+            VMHOTLOG("bound HTTP server on port %lu (requested %lu, attempt %ld)", (unsigned long)actual, (unsigned long)port, (long)(attempt + 1));
             return actual;
         }
 
-        NSLog(@"VMPlayerHotCode[LUCIFER-1761]: could not bind port %lu (attempt %ld of %ld): %@", (unsigned long)port, (long)(attempt + 1), (long)(retries + 1), error);
+        VMHOTLOG("could not bind port %lu (attempt %ld of %ld): %{public}@", (unsigned long)port, (long)(attempt + 1), (long)(retries + 1), error);
         if (attempt < retries) {
             [NSThread sleepForTimeInterval:0.25];
         }
